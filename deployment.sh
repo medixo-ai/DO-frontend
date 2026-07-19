@@ -5,6 +5,19 @@ set -euo pipefail
 # DO-Frontend — Build & Deploy Script
 # ──────────────────────────────────────────────────────────────
 
+# Load environment variables from ../env/.env (if it exists)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${SCRIPT_DIR}/../env/.env"
+
+if [ -f "$ENV_FILE" ]; then
+    echo "📄 Loading env from: ${ENV_FILE}"
+    set -a
+    source "$ENV_FILE"
+    set +a
+else
+    echo "⚠️  No env file found at ${ENV_FILE}, using defaults."
+fi
+
 IMAGE_NAME="do-frontend"
 IMAGE_TAG="${1:-latest}"
 CONTAINER_NAME="do-frontend"
