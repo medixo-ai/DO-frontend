@@ -28,6 +28,7 @@ COPY nginx.conf.template /etc/nginx/templates/default.conf.template
 
 # Default backend URL (override at runtime via env)
 ENV BACKEND_URL=http://localhost:8000
+ENV BACKEND_HOST=localhost
 
 EXPOSE 80
 

@@ -24,6 +24,9 @@ CONTAINER_NAME="do-frontend"
 HOST_PORT="${HOST_PORT:-3001}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 
+# Extract hostname from BACKEND_URL for nginx Host header (needed for HTTPS/ngrok)
+BACKEND_HOST=$(echo "${BACKEND_URL}" | sed -E 's|https?://([^/:]+).*|\1|')
+
 echo "╔══════════════════════════════════════════════════════╗"
 echo "║         DO-Frontend  — Build & Deploy               ║"
 echo "╠══════════════════════════════════════════════════════╣"
@@ -31,6 +34,7 @@ echo "║  Image:       ${IMAGE_NAME}:${IMAGE_TAG}"
 echo "║  Container:   ${CONTAINER_NAME}"
 echo "║  Port:        ${HOST_PORT} → 80"
 echo "║  Backend URL: ${BACKEND_URL}"
+echo "║  Backend Host:${BACKEND_HOST}"
 echo "╚══════════════════════════════════════════════════════╝"
 echo ""
 
@@ -57,6 +61,7 @@ docker run -d \
     --add-host=host.docker.internal:host-gateway \
     -p "${HOST_PORT}:80" \
     -e BACKEND_URL="${BACKEND_URL}" \
+    -e BACKEND_HOST="${BACKEND_HOST}" \
     --restart unless-stopped \
     "${IMAGE_NAME}:${IMAGE_TAG}"
 
