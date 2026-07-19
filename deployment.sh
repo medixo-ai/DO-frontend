@@ -8,7 +8,7 @@ set -euo pipefail
 IMAGE_NAME="do-frontend"
 IMAGE_TAG="${1:-latest}"
 CONTAINER_NAME="do-frontend"
-HOST_PORT="${HOST_PORT:-3000}"
+HOST_PORT="${HOST_PORT:-3001}"
 BACKEND_URL="${BACKEND_URL:-http://localhost:8000}"
 
 echo "╔══════════════════════════════════════════════════════╗"
