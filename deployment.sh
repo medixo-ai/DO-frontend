@@ -54,6 +54,7 @@ fi
 echo "🚀 Starting container..."
 docker run -d \
     --name "${CONTAINER_NAME}" \
+    --add-host=host.docker.internal:host-gateway \
     -p "${HOST_PORT}:80" \
     -e BACKEND_URL="${BACKEND_URL}" \
     --restart unless-stopped \
