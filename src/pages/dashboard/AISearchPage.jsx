@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bookmark, Clock, Filter, Zap, FileText, ChevronRight, Sparkles, AlertCircle } from 'lucide-react'
-import { apiQuery } from '../../services/api'
+import { Send, Bookmark, Clock, Filter, Zap, FileText, ChevronRight, Sparkles, AlertCircle, Building2 } from 'lucide-react'
+import { apiQuery, apiGetDepartments } from '../../services/api'
+import { useAuth } from '../../context/AuthContext'
 
 const SUGGESTED_QUESTIONS = [
   'What are the key policies for employees?',
@@ -21,12 +22,41 @@ function formatAnswer(text) {
 }
 
 export default function AISearchPage() {
+  const { user } = useAuth()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [recentSearches, setRecentSearches] = useState([])
   const [savedSearches, setSavedSearches] = useState([])
+  const [departments, setDepartments] = useState([])
+  const [selectedDept, setSelectedDept] = useState(null) // null = "All Departments"
   const bottomRef = useRef(null)
+
+  const isAdmin = user?.role === 'admin'
+
+  // Fetch departments from backend on mount
+  useEffect(() => {
+    apiGetDepartments()
+      .then(data => {
+        const depts = (data.departments || []).map(d => d.department).filter(Boolean)
+        setDepartments(depts)
+
+        // Non-admin users: default to their role as department
+        if (!isAdmin && user?.role) {
+          // Capitalize role name to match department naming (e.g. "manager" -> "Manager")
+          const userDept = user.role.charAt(0).toUpperCase() + user.role.slice(1).toLowerCase()
+          if (depts.includes(userDept)) {
+            setSelectedDept(userDept)
+          } else if (depts.includes(user.role)) {
+            setSelectedDept(user.role)
+          }
+        }
+      })
+      .catch(() => {
+        // Fallback — use static list if API fails
+        setDepartments(['HR', 'Finance', 'Legal', 'Engineering'])
+      })
+  }, [isAdmin, user?.role])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -38,12 +68,12 @@ export default function AISearchPage() {
     setInput('')
     setRecentSearches(prev => [q, ...prev.filter(s => s !== q)].slice(0, 8))
 
-    const userMsg = { id: Date.now(), role: 'user', content: q }
+    const userMsg = { id: Date.now(), role: 'user', content: q, department: selectedDept }
     setMessages(prev => [...prev, userMsg])
     setLoading(true)
 
     try {
-      const result = await apiQuery(q)
+      const result = await apiQuery(q, selectedDept)
 
       const assistantMsg = {
         id: Date.now() + 1,
@@ -89,9 +119,19 @@ export default function AISearchPage() {
             <h2 className="text-sm font-semibold text-gray-900 dark:text-white">AI Document Search</h2>
             <p className="text-xs text-gray-400">Knowledge graph powered · Real-time</p>
           </div>
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-            <span className="text-xs text-gray-400">Online</span>
+
+          {/* Department badge in header */}
+          <div className="ml-auto flex items-center gap-3">
+            {selectedDept && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-300 text-xs font-medium">
+                <Building2 className="w-3 h-3" />
+                {selectedDept}
+              </span>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
+              <span className="text-xs text-gray-400">Online</span>
+            </div>
           </div>
         </div>
 
@@ -103,7 +143,11 @@ export default function AISearchPage() {
                 <Sparkles className="w-7 h-7 text-brand-600 dark:text-brand-400" />
               </div>
               <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-1">Ask anything about your documents</h3>
-              <p className="text-sm text-gray-400 mb-6 max-w-sm">Get instant, cited answers from your knowledge graph. Powered by AI.</p>
+              <p className="text-sm text-gray-400 mb-6 max-w-sm">
+                {selectedDept
+                  ? `Searching within ${selectedDept} department documents`
+                  : 'Get instant, cited answers from your knowledge graph. Powered by AI.'}
+              </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 w-full max-w-lg">
                 {SUGGESTED_QUESTIONS.map(q => (
                   <button key={q} onClick={() => sendMessage(q)}
@@ -127,7 +171,15 @@ export default function AISearchPage() {
                 )}
                 <div className={`max-w-[75%] ${msg.role === 'user' ? 'bg-brand-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5' : `${msg.isError ? 'bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800' : 'bg-gray-50 dark:bg-gray-800'} rounded-2xl rounded-tl-sm p-4`}`}>
                   {msg.role === 'user' ? (
-                    <p className="text-sm">{msg.content}</p>
+                    <div>
+                      <p className="text-sm">{msg.content}</p>
+                      {msg.department && (
+                        <p className="text-xs opacity-70 mt-1 flex items-center gap-1">
+                          <Building2 className="w-3 h-3" />
+                          {msg.department}
+                        </p>
+                      )}
+                    </div>
                   ) : (
                     <>
                       <p className={`text-sm leading-relaxed ${msg.isError ? 'text-red-700 dark:text-red-300' : 'text-gray-800 dark:text-gray-200'}`}
@@ -197,7 +249,9 @@ export default function AISearchPage() {
                   {[0, 1, 2].map(i => (
                     <span key={i} className="w-2 h-2 bg-brand-400 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
                   ))}
-                  <span className="text-xs text-gray-400 ml-1">Searching knowledge graph...</span>
+                  <span className="text-xs text-gray-400 ml-1">
+                    Searching {selectedDept ? `${selectedDept} ` : ''}knowledge graph...
+                  </span>
                 </div>
               </div>
             </motion.div>
@@ -213,7 +267,9 @@ export default function AISearchPage() {
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-                placeholder="Ask anything about company policies, contracts, HR guidelines..."
+                placeholder={selectedDept
+                  ? `Ask about ${selectedDept} documents...`
+                  : 'Ask anything about company policies, contracts, HR guidelines...'}
                 className="input pr-10 py-3"
               />
             </div>
@@ -266,20 +322,48 @@ export default function AISearchPage() {
           </div>
         )}
 
-        {/* Filters */}
+        {/* Department Filter */}
         <div className="card p-4">
           <div className="flex items-center gap-2 mb-3">
             <Filter className="w-4 h-4 text-gray-400" />
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Search Filters</h3>
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Department Filter</h3>
           </div>
           <div className="space-y-2">
-            {['All Departments', 'HR', 'Finance', 'Legal', 'Engineering'].map(dept => (
+            {/* "All Departments" option — admin always sees it, non-admin too for flexibility */}
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="dept"
+                checked={selectedDept === null}
+                onChange={() => setSelectedDept(null)}
+                className="w-3.5 h-3.5 text-brand-600"
+              />
+              <span className={`text-xs ${selectedDept === null ? 'text-brand-600 dark:text-brand-400 font-semibold' : 'text-gray-600 dark:text-gray-400'}`}>
+                All Departments
+              </span>
+              {isAdmin && (
+                <span className="ml-auto text-[10px] text-gray-400 bg-gray-100 dark:bg-gray-700 px-1.5 py-0.5 rounded">Admin</span>
+              )}
+            </label>
+
+            {departments.map(dept => (
               <label key={dept} className="flex items-center gap-2 cursor-pointer">
-                <input type="radio" name="dept" defaultChecked={dept === 'All Departments'}
-                  className="w-3.5 h-3.5 text-brand-600" />
-                <span className="text-xs text-gray-600 dark:text-gray-400">{dept}</span>
+                <input
+                  type="radio"
+                  name="dept"
+                  checked={selectedDept === dept}
+                  onChange={() => setSelectedDept(dept)}
+                  className="w-3.5 h-3.5 text-brand-600"
+                />
+                <span className={`text-xs ${selectedDept === dept ? 'text-brand-600 dark:text-brand-400 font-semibold' : 'text-gray-600 dark:text-gray-400'}`}>
+                  {dept}
+                </span>
               </label>
             ))}
+
+            {departments.length === 0 && (
+              <p className="text-xs text-gray-400 italic">No departments found</p>
+            )}
           </div>
         </div>
       </div>

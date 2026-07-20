@@ -13,7 +13,7 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'user' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'hr' })
 
   // Fetch users from API on mount
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function UsersPage() {
       })
       setUsers(prev => [data.user, ...prev])
       setAddOpen(false)
-      setForm({ name: '', email: '', password: '', role: 'patient' })
+      setForm({ name: '', email: '', password: '', role: 'hr' })
     } catch (err) {
       alert(err.message || 'Failed to create user')
     } finally {

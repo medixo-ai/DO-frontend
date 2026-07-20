@@ -232,16 +232,22 @@ export function apiUploadFile(file, { documentName, department, accessLevel, tag
  *
  * Backend endpoint: POST /query
  *   - question: The natural language question (JSON body)
+ *   - department: Optional department to filter by (JSON body)
  *
  * Returns: { answer, entities_used, documents_accessed, relationship_count }
  *
  * @param {string} question - The question to ask
+ * @param {string|null} [department=null] - Department to filter results by
  * @returns {Promise<object>} Query result from the backend
  */
-export async function apiQuery(question) {
+export async function apiQuery(question, department = null) {
+  const body = { question };
+  if (department) {
+    body.department = department;
+  }
   return request('/query', {
     method: 'POST',
-    body: JSON.stringify({ question }),
+    body: JSON.stringify(body),
   });
 }
 

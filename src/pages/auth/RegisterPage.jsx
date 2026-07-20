@@ -6,7 +6,7 @@ import { Zap, AlertCircle } from 'lucide-react'
 export default function RegisterPage() {
   const { register } = useAuth()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', role: 'employee' })
+  const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '', role: 'hr' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -63,10 +63,11 @@ export default function RegisterPage() {
               <input type="email" required value={form.email} onChange={set('email')} className="input" placeholder="jane@company.com" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Role</label>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Department</label>
               <select value={form.role} onChange={set('role')} className="input">
-                <option value="employee">Employee</option>
-                <option value="manager">Manager</option>
+                <option value="hr">HR</option>
+                <option value="finance">Finance</option>
+                <option value="legal">Legal</option>
                 <option value="admin">Admin</option>
               </select>
             </div>

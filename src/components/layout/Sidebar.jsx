@@ -8,17 +8,17 @@ import {
 import { cn } from '../../utils/helpers'
 
 const allLinks = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'manager', 'employee'] },
-  { to: '/search', label: 'AI Search', icon: Search, roles: ['admin', 'manager', 'employee'] },
-  { to: '/documents', label: 'Documents', icon: FileText, roles: ['admin', 'manager', 'employee'] },
-  { to: '/upload', label: 'Upload', icon: Upload, roles: ['admin', 'manager'] },
-  { to: '/approvals', label: 'Approvals', icon: ClipboardCheck, roles: ['admin', 'manager'] },
-  { to: '/contradictions', label: 'Contradictions', icon: AlertTriangle, roles: ['admin', 'manager'] },
-  { to: '/departments', label: 'Departments', icon: Building2, roles: ['admin', 'manager'] },
-  { to: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin', 'manager'] },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['admin', 'hr', 'finance', 'legal'] },
+  { to: '/search', label: 'AI Search', icon: Search, roles: ['admin', 'hr', 'finance', 'legal'] },
+  { to: '/documents', label: 'Documents', icon: FileText, roles: ['admin', 'hr', 'finance', 'legal'] },
+  { to: '/upload', label: 'Upload', icon: Upload, roles: ['admin'] },
+  { to: '/approvals', label: 'Approvals', icon: ClipboardCheck, roles: ['admin'] },
+  { to: '/contradictions', label: 'Contradictions', icon: AlertTriangle, roles: ['admin'] },
+  { to: '/departments', label: 'Departments', icon: Building2, roles: ['admin'] },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['admin'] },
   { to: '/users', label: 'Users', icon: Users, roles: ['admin'] },
   { to: '/settings', label: 'Settings', icon: Settings, roles: ['admin'] },
-  { to: '/profile', label: 'Profile', icon: User, roles: ['admin', 'manager', 'employee'] },
+  { to: '/profile', label: 'Profile', icon: User, roles: ['admin', 'hr', 'finance', 'legal'] },
 ]
 
 export default function Sidebar({ open, onClose }) {

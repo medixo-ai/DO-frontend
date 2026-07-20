@@ -4,7 +4,7 @@ import { apiLogin, apiSignup, apiGetMe, getToken, clearToken } from '../services
 const AuthContext = createContext()
 
 // Only these roles are allowed to access the frontend
-const ALLOWED_ROLES = new Set(['admin', 'manager', 'employee'])
+const ALLOWED_ROLES = new Set(['admin', 'hr', 'finance', 'legal'])
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)

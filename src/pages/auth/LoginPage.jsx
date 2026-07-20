@@ -29,12 +29,6 @@ export default function LoginPage() {
     }
   }
 
-  const demoAccounts = [
-    { label: 'Admin', email: 'admin@intellidocs.com', pass: 'admin123' },
-    { label: 'Manager', email: 'manager@intellidocs.com', pass: 'admin123' },
-    { label: 'Employee', email: 'employee@intellidocs.com', pass: 'admin123' },
-  ]
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex">
       {/* Left panel */}
@@ -76,19 +70,6 @@ export default function LoginPage() {
 
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">Welcome back</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Sign in to your account to continue</p>
-
-          {/* Demo accounts */}
-          <div className="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-            <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 mb-2"></p>
-            <div className="flex flex-wrap gap-2">
-              {demoAccounts.map(acc => (
-                <button key={acc.label} onClick={() => setForm(f => ({ ...f, email: acc.email, password: acc.pass }))}
-                  className="text-xs bg-white dark:bg-gray-800 border border-blue-200 dark:border-blue-700 text-blue-700 dark:text-blue-300 px-2.5 py-1 rounded-md hover:bg-blue-50 dark:hover:bg-blue-900/30 transition-colors">
-                  {acc.label}
-                </button>
-              ))}
-            </div>
-          </div>
 
           {error && (
             <div className="mb-4 flex items-start gap-2 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
