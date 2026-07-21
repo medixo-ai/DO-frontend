@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Grid, List, Filter, Download, Share2, Trash2, Eye, Upload, AlertCircle, FileText } from 'lucide-react'
+import { Search, Grid, List, Filter, Download, Share2, Trash2, Eye, Upload, AlertCircle, FileText, ExternalLink } from 'lucide-react'
 import { PageHeader, Badge, EmptyState } from '../../components/shared/index.jsx'
-import { apiGetAllDocuments } from '../../services/api'
+import { apiGetAllDocuments, apiGetUploadedFiles, findUploadedFile } from '../../services/api'
 import { formatDate, getFileIcon, getAccessColor } from '../../utils/helpers'
 
 function formatFileSize(bytes) {
@@ -19,6 +19,7 @@ export default function DocumentsPage() {
   const [deptFilter, setDeptFilter] = useState('All')
   const [accessFilter, setAccessFilter] = useState('All')
   const [documents, setDocuments] = useState([])
+  const [uploadedFiles, setUploadedFiles] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -28,8 +29,14 @@ export default function DocumentsPage() {
       try {
         setLoading(true)
         setError(null)
-        const data = await apiGetAllDocuments()
-        if (!cancelled) setDocuments(data?.documents || [])
+        const [docData, filesData] = await Promise.all([
+          apiGetAllDocuments(),
+          apiGetUploadedFiles(),
+        ])
+        if (!cancelled) {
+          setDocuments(docData?.documents || [])
+          setUploadedFiles(filesData?.files || [])
+        }
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load documents')
       } finally {
@@ -53,6 +60,28 @@ export default function DocumentsPage() {
     const matchAccess = accessFilter === 'All' || doc.access_level === accessFilter
     return matchSearch && matchDept && matchAccess
   })
+
+  const handleView = (e, doc) => {
+    e.stopPropagation()
+    // Navigate to document detail page, Content Preview tab
+    navigate(`/documents/${doc.document_id}`)
+  }
+
+  const handleDownload = (e, doc) => {
+    e.stopPropagation()
+    const file = findUploadedFile(uploadedFiles, doc.document_id)
+    if (file) {
+      const a = document.createElement('a')
+      a.href = file.url
+      a.download = file.filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } else {
+      // Fallback: navigate to detail page
+      navigate(`/documents/${doc.document_id}`)
+    }
+  }
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -147,8 +176,8 @@ export default function DocumentsPage() {
                     )}
                   </div>
                   <div className="flex items-center gap-1 mt-3 opacity-0 group-hover:opacity-100 transition-opacity" onClick={e => e.stopPropagation()}>
-                    <button className="btn-ghost p-1.5 text-gray-400 hover:text-brand-600" title="View"><Eye className="w-3.5 h-3.5" /></button>
-                    <button className="btn-ghost p-1.5 text-gray-400 hover:text-green-600" title="Download"><Download className="w-3.5 h-3.5" /></button>
+                    <button onClick={(e) => handleView(e, doc)} className="btn-ghost p-1.5 text-gray-400 hover:text-brand-600" title="View"><Eye className="w-3.5 h-3.5" /></button>
+                    <button onClick={(e) => handleDownload(e, doc)} className="btn-ghost p-1.5 text-gray-400 hover:text-green-600" title="Download"><Download className="w-3.5 h-3.5" /></button>
                     <button className="btn-ghost p-1.5 text-gray-400 hover:text-blue-600" title="Share"><Share2 className="w-3.5 h-3.5" /></button>
                     <button className="btn-ghost p-1.5 text-gray-400 hover:text-red-500 ml-auto" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
@@ -190,9 +219,9 @@ export default function DocumentsPage() {
                       <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{formatDate(doc.created_at)}</td>
                       <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
                         <div className="flex items-center gap-1">
-                          <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-brand-600"><Eye className="w-3.5 h-3.5" /></button>
-                          <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-green-600"><Download className="w-3.5 h-3.5" /></button>
-                          <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                          <button onClick={(e) => handleView(e, doc)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-brand-600" title="View"><Eye className="w-3.5 h-3.5" /></button>
+                          <button onClick={(e) => handleDownload(e, doc)} className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-green-600" title="Download"><Download className="w-3.5 h-3.5" /></button>
+                          <button className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-400 hover:text-red-500" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       </td>
                     </tr>
@@ -206,3 +235,4 @@ export default function DocumentsPage() {
     </div>
   )
 }
+

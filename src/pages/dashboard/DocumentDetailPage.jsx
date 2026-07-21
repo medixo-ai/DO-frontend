@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, Share2, Trash2, FileText, Calendar, User, Shield, Activity, Eye, AlertCircle, Loader2 } from 'lucide-react'
-import { apiGetAllDocuments } from '../../services/api'
+import { ArrowLeft, Download, Share2, Trash2, FileText, Calendar, User, Shield, Activity, Eye, AlertCircle, Loader2, ExternalLink } from 'lucide-react'
+import { apiGetAllDocuments, apiGetUploadedFiles, findUploadedFile } from '../../services/api'
 import { formatDate, getFileIcon, getAccessColor } from '../../utils/helpers'
 import { PageHeader } from '../../components/shared/index.jsx'
 
@@ -21,6 +21,9 @@ export default function DocumentDetailPage() {
   const [doc, setDoc] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [fileInfo, setFileInfo] = useState(null)       // { filename, url, size }
+  const [textContent, setTextContent] = useState(null)  // For text file preview
+  const [textLoading, setTextLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -28,12 +31,23 @@ export default function DocumentDetailPage() {
       try {
         setLoading(true)
         setError(null)
-        const data = await apiGetAllDocuments()
-        const docs = data?.documents || []
+        // Fetch document metadata and uploaded file list in parallel
+        const [docData, filesData] = await Promise.all([
+          apiGetAllDocuments(),
+          apiGetUploadedFiles(),
+        ])
+        const docs = docData?.documents || []
         const found = docs.find(d => String(d.document_id) === String(id))
         if (!cancelled) {
           setDoc(found || null)
-          if (!found) setError('Document not found')
+          if (!found) {
+            setError('Document not found')
+          } else {
+            // Find the matching uploaded file
+            const files = filesData?.files || []
+            const match = findUploadedFile(files, found.document_id)
+            setFileInfo(match)
+          }
         }
       } catch (err) {
         if (!cancelled) setError(err.message || 'Failed to load document')
@@ -44,6 +58,46 @@ export default function DocumentDetailPage() {
     load()
     return () => { cancelled = true }
   }, [id])
+
+  // Fetch text content when switching to Content Preview for text files
+  useEffect(() => {
+    if (activeTab !== 'Content Preview' || !fileInfo || !doc) return
+    const fileType = (doc.file_type || 'txt').toLowerCase()
+    if (fileType === 'pdf') return // PDF uses iframe, no fetch needed
+
+    let cancelled = false
+    async function fetchText() {
+      setTextLoading(true)
+      try {
+        const res = await fetch(fileInfo.url)
+        if (res.ok) {
+          const text = await res.text()
+          if (!cancelled) setTextContent(text)
+        }
+      } catch {
+        // Silently fail — will show fallback
+      } finally {
+        if (!cancelled) setTextLoading(false)
+      }
+    }
+    fetchText()
+    return () => { cancelled = true }
+  }, [activeTab, fileInfo, doc])
+
+  const handleDownload = () => {
+    if (!fileInfo) return
+    const a = document.createElement('a')
+    a.href = fileInfo.url
+    a.download = fileInfo.filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+  }
+
+  const handleViewNewTab = () => {
+    if (!fileInfo) return
+    window.open(fileInfo.url, '_blank')
+  }
 
   if (loading) {
     return (
@@ -71,6 +125,10 @@ export default function DocumentDetailPage() {
     )
   }
 
+  const fileType = (doc.file_type || 'txt').toLowerCase()
+  const isPDF = fileType === 'pdf'
+  const isText = ['txt', 'text', 'md', 'csv', 'json', 'xml', 'html'].includes(fileType)
+
   return (
     <div className="space-y-5 animate-fade-in">
       <div className="flex items-center gap-3">
@@ -81,7 +139,12 @@ export default function DocumentDetailPage() {
           <PageHeader title={doc.document_name} subtitle={`${doc.department} · Uploaded ${formatDate(doc.created_at)}`} />
         </div>
         <div className="flex gap-2">
-          <button className="btn-secondary"><Download className="w-4 h-4" /> Download</button>
+          {fileInfo && (
+            <>
+              <button onClick={handleViewNewTab} className="btn-secondary"><ExternalLink className="w-4 h-4" /> Open</button>
+              <button onClick={handleDownload} className="btn-secondary"><Download className="w-4 h-4" /> Download</button>
+            </>
+          )}
           <button className="btn-secondary"><Share2 className="w-4 h-4" /> Share</button>
           <button className="btn-ghost p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"><Trash2 className="w-4 h-4" /></button>
         </div>
@@ -139,18 +202,112 @@ export default function DocumentDetailPage() {
                 ))}
               </div>
             </div>
+            {/* Quick View Button */}
+            {fileInfo && (
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Quick Actions</h3>
+                <div className="space-y-2">
+                  <button onClick={() => setActiveTab('Content Preview')}
+                    className="btn-primary w-full justify-center">
+                    <Eye className="w-4 h-4" /> View Document
+                  </button>
+                  <button onClick={handleDownload}
+                    className="btn-secondary w-full justify-center">
+                    <Download className="w-4 h-4" /> Download File
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
       {activeTab === 'Content Preview' && (
         <div className="card p-5">
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 min-h-64 flex flex-col items-center justify-center text-center">
-            <div className="text-5xl mb-4">{getFileIcon(doc.file_type || 'txt')}</div>
-            <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-2">{doc.document_name}</h3>
-            <p className="text-sm text-gray-400 mb-4">{formatFileSize(doc.file_size_bytes)}</p>
-            <button className="btn-primary"><Download className="w-4 h-4" /> Download to view</button>
-          </div>
+          {!fileInfo ? (
+            /* No file found on server */
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 min-h-64 flex flex-col items-center justify-center text-center">
+              <div className="text-5xl mb-4">{getFileIcon(doc.file_type || 'txt')}</div>
+              <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-2">{doc.document_name}</h3>
+              <p className="text-sm text-gray-400 mb-2">{formatFileSize(doc.file_size_bytes)}</p>
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/10 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400 text-sm mb-4">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Original file not found on server. It may have been removed.</span>
+              </div>
+            </div>
+          ) : isPDF ? (
+            /* PDF Viewer — inline iframe */
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">PDF Preview</h3>
+                <div className="flex gap-2">
+                  <button onClick={handleViewNewTab} className="btn-ghost text-xs px-3 py-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" /> Open in new tab
+                  </button>
+                  <button onClick={handleDownload} className="btn-ghost text-xs px-3 py-1.5">
+                    <Download className="w-3.5 h-3.5" /> Download
+                  </button>
+                </div>
+              </div>
+              <div className="rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700" style={{ height: '75vh' }}>
+                <iframe
+                  src={fileInfo.url}
+                  title={doc.document_name}
+                  className="w-full h-full"
+                  style={{ border: 'none', background: '#525659' }}
+                />
+              </div>
+            </div>
+          ) : isText ? (
+            /* Text File Viewer */
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                  {fileType.toUpperCase()} Content
+                </h3>
+                <button onClick={handleDownload} className="btn-ghost text-xs px-3 py-1.5">
+                  <Download className="w-3.5 h-3.5" /> Download
+                </button>
+              </div>
+              {textLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-5 h-5 text-brand-500 animate-spin" />
+                  <span className="ml-2 text-sm text-gray-400">Loading content…</span>
+                </div>
+              ) : textContent ? (
+                <div className="bg-gray-50 dark:bg-gray-800/80 rounded-xl border border-gray-200 dark:border-gray-700 overflow-auto" style={{ maxHeight: '75vh' }}>
+                  <pre className="p-5 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">
+                    {textContent}
+                  </pre>
+                </div>
+              ) : (
+                <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 text-center">
+                  <p className="text-sm text-gray-400 mb-3">Unable to load text content inline.</p>
+                  <button onClick={handleDownload} className="btn-primary">
+                    <Download className="w-4 h-4" /> Download to view
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Other file types — download only */
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-6 min-h-64 flex flex-col items-center justify-center text-center">
+              <div className="text-5xl mb-4">{getFileIcon(doc.file_type || 'txt')}</div>
+              <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-2">{doc.document_name}</h3>
+              <p className="text-sm text-gray-400 mb-4">{formatFileSize(doc.file_size_bytes)} · {fileType.toUpperCase()}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Preview not available for this file type.
+              </p>
+              <div className="flex gap-2">
+                <button onClick={handleViewNewTab} className="btn-secondary">
+                  <ExternalLink className="w-4 h-4" /> Open in browser
+                </button>
+                <button onClick={handleDownload} className="btn-primary">
+                  <Download className="w-4 h-4" /> Download
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

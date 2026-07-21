@@ -415,3 +415,42 @@ export async function apiGetTopQueries() {
 export async function apiGetDepartments() {
   return request('/departments', { method: 'GET' });
 }
+
+// ---------------------------------------------------------------------------
+// File Viewer / Downloads API
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all uploaded files from the server.
+ * Backend endpoint: GET /uploaded-files
+ * @returns {Promise<{ files: Array<{ filename: string, url: string, size: number }> }>}
+ */
+export async function apiGetUploadedFiles() {
+  return request('/uploaded-files', { method: 'GET' });
+}
+
+/**
+ * Build the URL to view/download an uploaded file.
+ * Files are stored as: {doc_id}_{original_filename}
+ *
+ * @param {number|string} docId - The document ID
+ * @param {string} originalFilename - The original uploaded filename
+ * @returns {string} The URL path to access the file
+ */
+export function getFileViewUrl(docId, originalFilename) {
+  const filename = `${docId}_${originalFilename}`;
+  return `${API_BASE}/uploads/${encodeURIComponent(filename)}`;
+}
+
+/**
+ * Find the uploaded file URL for a given document ID from the uploaded-files list.
+ * This is useful when you don't know the exact original filename.
+ *
+ * @param {Array} uploadedFiles - Array from apiGetUploadedFiles().files
+ * @param {number|string} docId - The document ID to find
+ * @returns {{ filename: string, url: string, size: number } | null}
+ */
+export function findUploadedFile(uploadedFiles, docId) {
+  const prefix = `${docId}_`;
+  return uploadedFiles.find(f => f.filename.startsWith(prefix)) || null;
+}
