@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { Upload, X, FileText, CheckCircle, AlertCircle, RotateCcw } from 'lucide-react'
 import { PageHeader } from '../../components/shared/index.jsx'
-import { apiUploadFile } from '../../services/api'
+import { apiUploadFileWithPolling } from '../../services/api'
 
 export default function UploadPage() {
   const [files, setFiles] = useState([])
@@ -21,7 +21,8 @@ export default function UploadPage() {
       file: f,
       id: Math.random(),
       progress: 0,
-      status: 'pending',   // pending | uploading | done | error
+      progressText: null,     // backend stage text (e.g. 'Extracting 5/20 chunks')
+      status: 'pending',      // pending | uploading | processing | done | error
       error: null,
       result: null,
     }))])
@@ -40,19 +41,25 @@ export default function UploadPage() {
   const uploadSingleFile = async (fileEntry) => {
     const docName = form.name || undefined
 
-    updateFile(fileEntry.id, { status: 'uploading', progress: 0, error: null })
+    updateFile(fileEntry.id, { status: 'uploading', progress: 0, progressText: null, error: null })
 
     try {
-      const result = await apiUploadFile(fileEntry.file, {
+      const result = await apiUploadFileWithPolling(fileEntry.file, {
         documentName: docName,
         department: form.department,
         accessLevel: form.access,
         tags: form.tags || undefined,
-        onProgress: (percent) => {
-          updateFile(fileEntry.id, { progress: percent })
+        onProgress: (percent, stageText) => {
+          if (stageText) {
+            // Backend processing phase — show stage text
+            updateFile(fileEntry.id, { status: 'processing', progress: 100, progressText: stageText })
+          } else {
+            // File upload phase — show percentage
+            updateFile(fileEntry.id, { progress: percent })
+          }
         },
       })
-      updateFile(fileEntry.id, { status: 'done', progress: 100, result })
+      updateFile(fileEntry.id, { status: 'done', progress: 100, progressText: null, result })
       return true
     } catch (err) {
       updateFile(fileEntry.id, {
@@ -143,7 +150,7 @@ export default function UploadPage() {
             {successCount > 0 && <span className="text-green-500 ml-2">· {successCount} done</span>}
             {errorCount > 0 && <span className="text-red-500 ml-2">· {errorCount} failed</span>}
           </h3>
-          {files.map(({ file, id, progress, status, error }) => (
+          {files.map(({ file, id, progress, progressText, status, error }) => (
             <div key={id} className={`flex items-center gap-3 p-3 rounded-lg ${status === 'error' ? 'bg-red-50 dark:bg-red-900/10' : 'bg-gray-50 dark:bg-gray-800'}`}>
               <FileText className={`w-5 h-5 flex-shrink-0 ${status === 'error' ? 'text-red-500' : 'text-brand-500'}`} />
               <div className="flex-1 min-w-0">
@@ -157,6 +164,11 @@ export default function UploadPage() {
                 {status === 'uploading' && (
                   <p className="text-xs text-brand-500 mt-1">
                     {progress < 100 ? `Uploading... ${progress}%` : 'Processing & ingesting...'}
+                  </p>
+                )}
+                {status === 'processing' && (
+                  <p className="text-xs text-brand-500 mt-1 animate-pulse">
+                    {progressText || 'Processing…'}
                   </p>
                 )}
                 {status === 'error' && (
@@ -176,7 +188,7 @@ export default function UploadPage() {
                     <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              ) : status === 'uploading' ? (
+              ) : (status === 'uploading' || status === 'processing') ? (
                 <span className="w-4 h-4 border-2 border-brand-200 border-t-brand-600 rounded-full animate-spin flex-shrink-0" />
               ) : (
                 <button onClick={() => removeFile(id)} className="p-1 hover:bg-gray-200 dark:hover:bg-gray-700 rounded text-gray-400 hover:text-red-500">

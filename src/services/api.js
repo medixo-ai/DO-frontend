@@ -135,7 +135,7 @@ export async function apiPost(path, body) {
  * Upload a file to the ingestion pipeline.
  * Uses XMLHttpRequest for real upload progress tracking.
  *
- * Backend endpoint: POST /ingest
+ * Backend endpoint: POST /ingest  (returns 202 with {task_id, status})
  *   - file: The file to upload (multipart/form-data)
  *   - document_name: Optional document name (query param)
  *   - department: Optional department (query param)
@@ -148,9 +148,9 @@ export async function apiPost(path, body) {
  * @param {string} [options.department] - Department (HR, Finance, etc.)
  * @param {string} [options.accessLevel] - Access level (All, Manager, Admin)
  * @param {string} [options.tags] - Comma-separated tags
- * @param {function} [options.onProgress] - Progress callback (0-100)
+ * @param {function} [options.onProgress] - Progress callback (0-100 for upload, or string for processing stage)
  * @param {AbortSignal} [options.signal] - AbortController signal
- * @returns {Promise<object>} Ingestion result from the backend
+ * @returns {Promise<object>} { task_id, status, document_name } on acceptance
  */
 export function apiUploadFile(file, { documentName, department, accessLevel, tags, onProgress, signal } = {}) {
   return new Promise((resolve, reject) => {
@@ -173,7 +173,7 @@ export function apiUploadFile(file, { documentName, department, accessLevel, tag
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
 
-    // Track upload progress
+    // Track upload progress (file transfer phase only)
     if (onProgress) {
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable) {
@@ -183,7 +183,7 @@ export function apiUploadFile(file, { documentName, department, accessLevel, tag
       });
     }
 
-    // Handle completion
+    // Handle completion — backend now returns 202
     xhr.addEventListener('load', () => {
       let data;
       try {
@@ -222,6 +222,111 @@ export function apiUploadFile(file, { documentName, department, accessLevel, tag
     xhr.send(formData);
   });
 }
+
+
+/**
+ * Check the status of a background ingestion task.
+ *
+ * Backend endpoint: GET /ingest/status/{taskId}
+ *
+ * @param {string} taskId - The task ID returned by POST /ingest
+ * @returns {Promise<object>} { task_id, status, progress, result, error, ... }
+ */
+export async function apiCheckIngestionStatus(taskId) {
+  return request(`/ingest/status/${taskId}`, { method: 'GET' });
+}
+
+
+/**
+ * Upload a file and poll until ingestion completes or fails.
+ *
+ * Combines apiUploadFile + apiCheckIngestionStatus into a single promise.
+ *
+ * @param {File} file - The file to upload
+ * @param {object} options
+ * @param {string} [options.documentName]
+ * @param {string} [options.department]
+ * @param {string} [options.accessLevel]
+ * @param {string} [options.tags]
+ * @param {function} [options.onProgress] - Called with (percent: number) during upload,
+ *                                          then (progressText: string) during processing
+ * @param {function} [options.onStatusChange] - Called with full status object on each poll
+ * @param {AbortSignal} [options.signal]
+ * @param {number} [options.pollIntervalMs=3000] - Milliseconds between status polls
+ * @returns {Promise<object>} The completed IngestionResult from the backend
+ */
+export async function apiUploadFileWithPolling(file, {
+  documentName, department, accessLevel, tags,
+  onProgress, onStatusChange, signal,
+  pollIntervalMs = 3000,
+} = {}) {
+  // Phase 1: Upload the file (returns 202 with task_id)
+  const accepted = await apiUploadFile(file, {
+    documentName, department, accessLevel, tags,
+    onProgress: (percent) => {
+      if (onProgress) onProgress(percent, null);
+    },
+    signal,
+  });
+
+  const taskId = accepted.task_id;
+  if (!taskId) {
+    // Fallback: backend returned a result directly (shouldn't happen, but safe)
+    return accepted;
+  }
+
+  // Phase 2: Poll for completion
+  if (onProgress) onProgress(100, 'Processing…');
+
+  return new Promise((resolve, reject) => {
+    let cancelled = false;
+
+    if (signal) {
+      signal.addEventListener('abort', () => {
+        cancelled = true;
+        reject(new Error('Upload cancelled'));
+      });
+    }
+
+    const poll = async () => {
+      if (cancelled) return;
+
+      try {
+        const status = await apiCheckIngestionStatus(taskId);
+        if (onStatusChange) onStatusChange(status);
+
+        if (status.status === 'completed') {
+          if (onProgress) onProgress(100, 'Done');
+          resolve(status.result || status);
+          return;
+        }
+
+        if (status.status === 'failed') {
+          const err = new Error(status.error || 'Ingestion failed');
+          err.status = 500;
+          err.data = status;
+          reject(err);
+          return;
+        }
+
+        // Still processing — report progress and poll again
+        if (onProgress && status.progress) {
+          onProgress(100, status.progress);
+        }
+        setTimeout(poll, pollIntervalMs);
+      } catch (err) {
+        // Network error during polling — retry once
+        if (!cancelled) {
+          setTimeout(poll, pollIntervalMs * 2);
+        }
+      }
+    };
+
+    // First poll after a short delay
+    setTimeout(poll, 1000);
+  });
+}
+
 
 // ---------------------------------------------------------------------------
 // Query / AI Search API
