@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Send, Bookmark, Clock, Filter, Zap, FileText, ChevronRight, Sparkles, AlertCircle, Building2 } from 'lucide-react'
-import { apiQuery, apiGetDepartments } from '../../services/api'
+import { Send, Bookmark, Clock, Filter, Zap, FileText, ChevronRight, Sparkles, AlertCircle, Building2, Hash, Eye, EyeOff, ExternalLink, X } from 'lucide-react'
+import { apiQuery, apiGetDepartments, apiGetUploadedFiles } from '../../services/api'
 import { useAuth } from '../../context/AuthContext'
 
 const SUGGESTED_QUESTIONS = [
@@ -31,6 +31,9 @@ export default function AISearchPage() {
   const [departments, setDepartments] = useState([])
   const [selectedDept, setSelectedDept] = useState(null) // null = "All Departments"
   const bottomRef = useRef(null)
+  const [expandedSources, setExpandedSources] = useState(new Set())
+  const [uploadedFiles, setUploadedFiles] = useState([])
+  const [pdfViewer, setPdfViewer] = useState(null) // { url, name, page }
 
   const isAdmin = user?.role === 'admin'
 
@@ -58,6 +61,13 @@ export default function AISearchPage() {
       })
   }, [isAdmin, user?.role])
 
+  // Fetch uploaded files so we can map document_id -> PDF filename
+  useEffect(() => {
+    apiGetUploadedFiles()
+      .then(data => setUploadedFiles(data.files || []))
+      .catch(() => {}) // non-critical
+  }, [])
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
@@ -79,9 +89,8 @@ export default function AISearchPage() {
         id: Date.now() + 1,
         role: 'assistant',
         text: result.answer,
-        sources: (result.documents_accessed || []).map(docName => ({
-          name: docName,
-        })),
+        sources: result.sources || [],
+        documentsAccessed: result.documents_accessed || [],
         entitiesUsed: result.entities_used || [],
         relationshipCount: result.relationship_count || 0,
       }
@@ -99,6 +108,21 @@ export default function AISearchPage() {
     }
   }
 
+  // Open PDF in an in-page modal viewer
+  const openSourcePdf = (src) => {
+    if (!src.document_id) return
+    const prefix = `${src.document_id}_`
+    const match = uploadedFiles.find(f => f.filename.startsWith(prefix))
+    if (match) {
+      const page = src.page_numbers && src.page_numbers.length > 0 ? src.page_numbers[0] : 1
+      setPdfViewer({
+        url: `${match.url}#page=${page}`,
+        name: src.document_name || match.filename,
+        page,
+      })
+    }
+  }
+
   const saveSearch = (query) => {
     setSavedSearches(prev => {
       if (prev.includes(query)) return prev
@@ -107,6 +131,7 @@ export default function AISearchPage() {
   }
 
   return (
+    <>
     <div className="flex gap-6 h-[calc(100vh-8rem)] animate-fade-in">
       {/* Main Chat */}
       <div className="flex-1 flex flex-col card overflow-hidden">
@@ -185,20 +210,72 @@ export default function AISearchPage() {
                       <p className={`text-sm leading-relaxed ${msg.isError ? 'text-red-700 dark:text-red-300' : 'text-gray-800 dark:text-gray-200'}`}
                         dangerouslySetInnerHTML={{ __html: formatAnswer(msg.text) }} />
 
-                      {/* Sources */}
+                      {/* Sources — eye toggle to show/hide */}
                       {msg.sources && msg.sources.length > 0 && (
-                        <div className="mt-3 space-y-2">
-                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
-                            Sources ({msg.sources.length} document{msg.sources.length > 1 ? 's' : ''})
-                          </p>
-                          {msg.sources.map((src, i) => (
-                            <div key={i} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2.5">
-                              <div className="flex items-center gap-1.5">
-                                <FileText className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
-                                <span className="text-xs font-medium text-gray-800 dark:text-gray-200">{src.name}</span>
-                              </div>
-                            </div>
-                          ))}
+                        <div className="mt-3">
+                          <button
+                            onClick={() => setExpandedSources(prev => {
+                              const next = new Set(prev)
+                              if (next.has(msg.id)) next.delete(msg.id)
+                              else next.add(msg.id)
+                              return next
+                            })}
+                            className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 transition-colors px-2.5 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50"
+                          >
+                            {expandedSources.has(msg.id)
+                              ? <EyeOff className="w-3.5 h-3.5" />
+                              : <Eye className="w-3.5 h-3.5" />}
+                            {expandedSources.has(msg.id) ? 'Hide' : 'View'} Sources ({msg.sources.length})
+                          </button>
+
+                          <AnimatePresence>
+                            {expandedSources.has(msg.id) && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: 'auto' }}
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.2 }}
+                                className="overflow-hidden"
+                              >
+                                <div className="mt-2 space-y-2">
+                                  {msg.sources.map((src, i) => (
+                                    <div
+                                      key={i}
+                                      onClick={() => openSourcePdf(src)}
+                                      className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-2.5 ${src.document_id ? 'cursor-pointer hover:border-brand-400 dark:hover:border-brand-600 hover:shadow-sm transition-all' : ''}`}
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <FileText className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
+                                        <span className="text-xs font-medium text-gray-800 dark:text-gray-200">
+                                          {src.document_name || 'Unknown document'}
+                                        </span>
+                                        {src.page_numbers && src.page_numbers.length > 0 && (
+                                          <span className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 px-2 py-0.5 rounded-full">
+                                            <Hash className="w-3 h-3" />
+                                            Page {src.page_numbers.join(', ')}
+                                          </span>
+                                        )}
+                                        {src.document_id && (
+                                          <ExternalLink className="w-3 h-3 text-gray-400 flex-shrink-0" />
+                                        )}
+                                      </div>
+                                      {src.entity_name && (
+                                        <div className="flex items-center gap-1.5 mt-1.5">
+                                          <span className="text-[11px] text-gray-400">Entity:</span>
+                                          <span className="text-[11px] text-gray-600 dark:text-gray-300">{src.entity_name}</span>
+                                          {src.entity_type && (
+                                            <span className="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 px-1.5 py-0.5 rounded">
+                                              {src.entity_type}
+                                            </span>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                       )}
 
@@ -368,5 +445,58 @@ export default function AISearchPage() {
         </div>
       </div>
     </div>
+
+    {/* PDF Viewer Modal */}
+    <AnimatePresence>
+      {pdfViewer && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setPdfViewer(null)}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.2 }}
+            className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <FileText className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                  {pdfViewer.name}
+                </span>
+                <span className="text-xs text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded-full flex-shrink-0">
+                  Page {pdfViewer.page}
+                </span>
+              </div>
+              <button
+                onClick={() => setPdfViewer(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* PDF iframe */}
+            <div className="flex-1">
+              <iframe
+                src={pdfViewer.url}
+                title={pdfViewer.name}
+                className="w-full h-full border-0"
+              />
+            </div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+
+    </>
   )
 }

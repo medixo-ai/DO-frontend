@@ -339,7 +339,7 @@ export async function apiUploadFileWithPolling(file, {
  *   - question: The natural language question (JSON body)
  *   - department: Optional department to filter by (JSON body)
  *
- * Returns: { answer, entities_used, documents_accessed, relationship_count }
+ * Returns: { answer, entities_used, documents_accessed, relationship_count, sources }
  *
  * @param {string} question - The question to ask
  * @param {string|null} [department=null] - Department to filter results by
